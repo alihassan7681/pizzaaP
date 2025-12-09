@@ -1,0 +1,27 @@
+{
+  "name": "pizza-planet-backend",
+  "version": "1.0.0",
+  "description": "Backend for Pizza Planet ordering system",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node seedData.js",
+    "create-admin": "node createAdmin.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  },
+  "keywords": ["pizza", "ordering", "backend", "express", "mongodb"],
+  "author": "Pizza Planet Team",
+  "license": "MIT"
+}
