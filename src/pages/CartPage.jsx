@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaShoppingCart, FaPlus, FaMinus, FaTrash, FaArrowLeft, FaPizzaSlice, FaUser, FaPhone, FaMapMarkerAlt, FaHome, FaCity } from 'react-icons/fa';
+import { FaShoppingCart, FaPlus, FaMinus, FaTrash, FaArrowLeft, FaPizzaSlice, FaUser, FaPhone, FaMapMarkerAlt, FaHome, FaCity, FaHistory } from 'react-icons/fa';
 import { useCart } from '../context/CartContext';
 import { toast } from 'react-toastify';
 
@@ -17,8 +17,35 @@ function CartPage() {
     postalCode: '',
     notes: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
 
   const deliveryFee = 150;
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchUserProfile();
+    }
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/auth/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
 
   const handleInputChange = (e) => {
     setFormData({
@@ -27,7 +54,14 @@ function CartPage() {
     });
   };
 
-  const handleSubmitOrder = (e) => {
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userRole');
+    setUser(null);
+    navigate('/login');
+  };
+
+  const handleSubmitOrder = async (e) => {
     e.preventDefault();
     
     if (!formData.name || !formData.phone || !formData.address || !formData.city) {
@@ -38,28 +72,79 @@ function CartPage() {
       return;
     }
 
-    // Simulate order processing
-    toast.success('🍕 Order placed successfully! We will deliver in 30-45 minutes.', {
-      position: "top-center",
-      autoClose: 5000,
-    });
+    setLoading(true);
 
-    // Clear cart and form
-    clearCart();
-    setFormData({
-      name: '',
-      phone: '',
-      email: '',
-      address: '',
-      city: '',
-      postalCode: '',
-      notes: ''
-    });
-    
-    // Redirect to home after 2 seconds
-    setTimeout(() => {
-      navigate('/');
-    }, 2000);
+    try {
+      // Prepare order data
+      const orderData = {
+        items: cart.map(item => ({
+          menuItemId: item._id || item.id, // Use _id if from backend, id if hardcoded
+          size: item.size,
+          quantity: item.quantity,
+          price: item.price
+        })),
+        shippingAddress: {
+          street: formData.address,
+          city: formData.city,
+          zipCode: formData.postalCode || '',
+          phone: formData.phone // Add phone number to shipping address
+        },
+        totalAmount: parseFloat(getTotal()) + deliveryFee
+      };
+
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
+      
+      // Send order to backend
+      const response = await fetch('http://localhost:5000/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      if (response.ok) {
+        const order = await response.json();
+        
+        toast.success('🍕 Order placed successfully! We will deliver in 30-45 minutes.', {
+          position: "top-center",
+          autoClose: 5000,
+        });
+
+        // Clear cart and form
+        clearCart();
+        setFormData({
+          name: '',
+          phone: '',
+          email: '',
+          address: '',
+          city: '',
+          postalCode: '',
+          notes: ''
+        });
+        
+        // Redirect to home after 2 seconds
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
+      } else {
+        const errorData = await response.json();
+        toast.error(`Order failed: ${errorData.message || 'Please try again'}`, {
+          position: "top-right",
+          autoClose: 5000,
+        });
+      }
+    } catch (error) {
+      console.error('Error placing order:', error);
+      toast.error('Failed to place order. Please try again.', {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,9 +163,43 @@ function CartPage() {
               </div>
               <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-pizza-yellow">Pizza Planet</h1>
             </div>
-            <Link to="/order" className="text-pizza-yellow hover:text-yellow-500 font-semibold">
-              Continue Shopping
-            </Link>
+            <div className="flex items-center space-x-4">
+              {user ? (
+                <div className="relative group">
+                  <div className="flex items-center space-x-2 cursor-pointer">
+                    <div className="w-8 h-8 bg-pizza-yellow rounded-full flex items-center justify-center">
+                      <span className="text-pizza-black font-bold text-sm">
+                        {user.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="text-pizza-yellow font-semibold hidden sm:block">{user.name}</span>
+                  </div>
+                  <div className="absolute right-0 mt-2 w-48 bg-pizza-black border border-pizza-yellow/30 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <Link 
+                      to="/my-orders" 
+                      className="block px-4 py-2 text-sm text-gray-300 hover:bg-pizza-yellow/10 hover:text-pizza-yellow"
+                    >
+                      <FaHistory className="inline mr-2" />
+                      My Orders
+                    </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-pizza-yellow/10 hover:text-pizza-yellow"
+                    >
+                      <FaArrowLeft className="inline mr-2" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <Link to="/login" className="text-pizza-yellow hover:text-yellow-500 font-semibold">
+                  Login
+                </Link>
+              )}
+              <Link to="/order" className="text-pizza-yellow hover:text-yellow-500 font-semibold">
+                Continue Shopping
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -308,10 +427,19 @@ function CartPage() {
 
                         <button
                           type="submit"
-                          className="w-full bg-pizza-yellow text-pizza-black py-4 rounded-lg font-bold hover:bg-yellow-500 transition-all transform hover:scale-105 flex items-center justify-center space-x-2"
+                          disabled={loading}
+                          className="w-full bg-pizza-yellow text-pizza-black py-4 rounded-lg font-bold hover:bg-yellow-500 transition-all transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-50"
                         >
-                          <span>Place Order - PKR {(parseFloat(getTotal()) + deliveryFee).toFixed(2)}</span>
-                          <FaPizzaSlice />
+                          {loading ? (
+                            <>
+                              <span>Placing Order...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Place Order - PKR {(parseFloat(getTotal()) + deliveryFee).toFixed(2)}</span>
+                              <FaPizzaSlice />
+                            </>
+                          )}
                         </button>
                       </form>
                     </div>
